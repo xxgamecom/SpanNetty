@@ -24,12 +24,12 @@
 
 namespace DotNetty.Handlers.Tls
 {
-    using DotNetty.Buffers;
-    using DotNetty.Common.Utilities;
     using System;
     using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
+    using DotNetty.Buffers;
+    using DotNetty.Common.Utilities;
 
     partial class TlsHandler
     {
@@ -65,10 +65,10 @@ namespace DotNetty.Handlers.Tls
                         }
                         else
                         {
-                            buf = allocator.CompositeBuffer(leftLen);
+                            buf = allocator.CompositeBuffer();
                             this._ownedInputBuffer = buf;
                         }
-                        buf.WriteBytes(this._sslOwnedBuffer.Slice(this._inputOffset, leftLen));
+                        buf.WriteBytes(this._input.Slice(this._inputOffset, leftLen));
                     }
                     else
                     {

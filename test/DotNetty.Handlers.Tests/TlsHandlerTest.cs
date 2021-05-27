@@ -444,15 +444,17 @@ namespace DotNetty.Handlers.Tests
             public static readonly IReadOnlyList<SslProtocols> SupportedSslProtocolList;
             static Platform()
             {
-                var allProtocol = new[]
+                var allProtocol = (SslProtocols[])Enum.GetValues(typeof(SslProtocols));
+                //Check newer protocol first
+                allProtocol = allProtocol.Except(new SslProtocols[]
                 {
-                    SslProtocols.Tls,
-                    SslProtocols.Tls11,
-                    SslProtocols.Tls12,
-#if NETCOREAPP_3_0_GREATER
-                    SslProtocols.Tls13,
-#endif
-                };
+                    SslProtocols.None,
+#pragma warning disable CS0618 // Type or member is obsolete
+                    SslProtocols.Ssl2,
+                    SslProtocols.Ssl3,
+                    SslProtocols.Default,
+#pragma warning restore CS0618 // Type or member is obsolete
+                }).OrderByDescending(p => p).ToArray();
                 var protocols = SslProtocols.None;
                 var list = new List<SslProtocols>();
                 foreach (var cur in allProtocol)

@@ -43,7 +43,7 @@ namespace DotNetty.Handlers.Tls
             private IPromise _writeCompletion;
             private AsyncCallback _writeCallback;
 
-            public void SetSource(byte[] source, int offset)
+            public void SetSource(byte[] source, int offset, IByteBufferAllocator allocator)
             {
                 Debug.Assert(SourceReadableBytes == 0);
                 _input = source;
@@ -52,7 +52,7 @@ namespace DotNetty.Handlers.Tls
                 _inputLength = 0;
             }
 
-            public void ResetSource()
+            public void ResetSource(IByteBufferAllocator allocator)
             {
                 Debug.Assert(SourceReadableBytes == 0);
                 _input = null;
@@ -228,6 +228,26 @@ namespace DotNetty.Handlers.Tls
                     throw;
                 }
             }
+
+#region sync result
+
+            private sealed class SynchronousAsyncResult<T> : IAsyncResult
+            {
+                public T Result { get; set; }
+
+                public bool IsCompleted => true;
+
+                public WaitHandle AsyncWaitHandle
+                {
+                    get { throw new InvalidOperationException("Cannot wait on a synchronous result."); }
+                }
+
+                public object AsyncState { get; set; }
+
+                public bool CompletedSynchronously => true;
+            }
+
+#endregion
         }
     }
 }

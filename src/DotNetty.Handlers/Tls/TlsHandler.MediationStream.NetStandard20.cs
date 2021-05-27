@@ -46,7 +46,7 @@ namespace DotNetty.Handlers.Tls
                 _inputLength = 0;
             }
 
-            public void ResetSource()
+            public void ResetSource(IByteBufferAllocator allocator)
             {
                 Debug.Assert(SourceReadableBytes == 0);
                 _input = null;
@@ -54,7 +54,7 @@ namespace DotNetty.Handlers.Tls
                 _inputLength = 0;
             }
 
-            public void ExpandSource(int count)
+            public void ExpandSource(int count, IByteBufferAllocator allocator)
             {
                 Debug.Assert(_input is object);
 

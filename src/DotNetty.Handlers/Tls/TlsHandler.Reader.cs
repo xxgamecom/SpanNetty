@@ -232,10 +232,10 @@ namespace DotNetty.Handlers.Tls
             {
 #if NETCOREAPP || NETSTANDARD_2_0_GREATER
                 ReadOnlyMemory<byte> inputIoBuffer = packet.GetReadableMemory(offset, length);
-                _mediationStream.SetSource(inputIoBuffer);
+                _mediationStream.SetSource(inputIoBuffer, ctx.Allocator);
 #else
                 ArraySegment<byte> inputIoBuffer = packet.GetIoBuffer(offset, length);
-                _mediationStream.SetSource(inputIoBuffer.Array, inputIoBuffer.Offset);
+                _mediationStream.SetSource(inputIoBuffer.Array, inputIoBuffer.Offset, ctx.Allocator);
 #endif
 
                 int packetIndex = 0;
@@ -358,7 +358,7 @@ namespace DotNetty.Handlers.Tls
             }
             finally
             {
-                _mediationStream.ResetSource();
+                _mediationStream.ResetSource(ctx.Allocator);
                 if (!pending && outputBuffer is object)
                 {
                     if (outputBuffer.IsReadable())

@@ -21,6 +21,7 @@ namespace DotNetty.Handlers.Tests
     using DotNetty.Transport.Channels.Embedded;
     using Xunit;
     using Xunit.Abstractions;
+    using System.Runtime.ExceptionServices;
 
     public class SniHandlerTest : TestBase
     {
@@ -243,14 +244,36 @@ namespace DotNetty.Handlers.Tests
             });
 
             var driverStream = new SslStream(mediationStream, true, (_1, _2, _3, _4) => true);
-            if (isClient)
+            Exception e1 = null, e2 = null;
+            try
             {
-                ServerTlsSettings serverTlsSettings = CertificateSelector(targetHost).Result;
-                await Task.Run(() => driverStream.AuthenticateAsServerAsync(serverTlsSettings.Certificate, false, protocol | serverTlsSettings.EnabledProtocols, false).WithTimeout(TimeSpan.FromSeconds(5)));
+                if (isClient)
+                {
+                    ServerTlsSettings serverTlsSettings = CertificateSelector(targetHost).Result;
+                    await Task.Run(() => driverStream.AuthenticateAsServerAsync(serverTlsSettings.Certificate, false, protocol | serverTlsSettings.EnabledProtocols, false).WithTimeout(TimeSpan.FromSeconds(5)));
+                }
+                else
+                {
+                    await Task.Run(() => driverStream.AuthenticateAsClientAsync(targetHost, null, protocol, false)).WithTimeout(TimeSpan.FromSeconds(5));
+                }
             }
-            else
+            catch (Exception ex)
             {
-                await Task.Run(() => driverStream.AuthenticateAsClientAsync(targetHost, null, protocol, false)).WithTimeout(TimeSpan.FromSeconds(5));
+                e1 = ex;
+            }
+            try
+            {
+                ch.CheckException();
+            }
+            catch (Exception ex)
+            {
+                e2 = ex;
+            }
+            if (e1 != null || e2 != null)
+            {
+                if (e1 != null && e2 != null)
+                    throw new AggregateException(e1, e2);
+                ExceptionDispatchInfo.Capture(e1 ?? e2).Throw();
             }
             writeTasks.Clear();
 

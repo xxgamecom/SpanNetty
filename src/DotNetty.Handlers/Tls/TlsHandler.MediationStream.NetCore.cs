@@ -41,6 +41,7 @@ namespace DotNetty.Handlers.Tls
 
             public void SetSource(in ReadOnlyMemory<byte> source, IByteBufferAllocator allocator)
             {
+                Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]SetSource");
                 lock (this)
                 {
                     ResetSource(allocator);
@@ -59,6 +60,7 @@ namespace DotNetty.Handlers.Tls
                     var buf = this._ownedInputBuffer;
                     if (leftLen > 0)
                     {
+                        Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ResetSource->{leftLen}");
                         if (buf != null)
                         {
                             buf.DiscardSomeReadBytes();
@@ -72,6 +74,7 @@ namespace DotNetty.Handlers.Tls
                     }
                     else
                     {
+                        Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ResetSource->clean");
                         buf?.DiscardSomeReadBytes();
                     }
                     _input = null;
@@ -82,6 +85,7 @@ namespace DotNetty.Handlers.Tls
 
             public void ExpandSource(int count)
             {
+                Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ExpandSource: {count}");
                 lock (this)
                 {
                     Debug.Assert(!_input.IsEmpty);
@@ -114,6 +118,7 @@ namespace DotNetty.Handlers.Tls
 
             public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
             {
+                Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ReadAsync");
                 if (this.TotalReadableBytes > 0)
                 {
                     // we have the bytes available upfront - write out synchronously
@@ -173,6 +178,7 @@ namespace DotNetty.Handlers.Tls
                         }
                     } while (false);
 
+                    Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ReadFromInput : length={length}\r\n{ByteBufferUtil.PrettyHexDump(Unpooled.WrappedBuffer(destination.Slice(0, length).ToArray()))}");
                     return length;
                 }
             }

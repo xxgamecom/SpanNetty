@@ -10,12 +10,14 @@ namespace DotNetty.Handlers.Tests
     using System.Net;
     using System.Net.Security;
     using System.Net.Sockets;
+    using System.Runtime.ExceptionServices;
     using System.Security.Authentication;
     using System.Security.Cryptography.X509Certificates;
     using System.Threading.Tasks;
     using DotNetty.Buffers;
     using DotNetty.Common.Concurrency;
     using DotNetty.Common.Utilities;
+    using DotNetty.Handlers.Logging;
     using DotNetty.Handlers.Tls;
     using DotNetty.Tests.Common;
     using DotNetty.Transport.Channels;
@@ -30,6 +32,7 @@ namespace DotNetty.Handlers.Tests
         public TlsHandlerTest(ITestOutputHelper output)
             : base(output)
         {
+            Process.GetCurrentProcess().ProcessorAffinity = new IntPtr(1);
         }
 
         public static IEnumerable<object[]> GetTlsReadTestData()
@@ -154,6 +157,7 @@ namespace DotNetty.Handlers.Tests
                     Assert.True(isEqual, $"---Expected:\n{ByteBufferUtil.PrettyHexDump(expectedBuffer)}\n---Actual:\n{ByteBufferUtil.PrettyHexDump(finalReadBuffer)}");
                 }
                 driverStream.Dispose();
+                await ch.CloseAsync().WithTimeout(TimeSpan.FromSeconds(1));
                 Assert.False(ch.Finish());
             }
             finally
@@ -204,9 +208,31 @@ namespace DotNetty.Handlers.Tests
                 select new object[] { frameLengths, isClient, protocol.serverProtocol, protocol.clientProtocol };
         }
 
+        public static IEnumerable<object[]> GetTlsWriteTestProtocol1()
+        {
+            var lengthVariations =
+                new[]
+                {
+                    new[] { 1 }
+                };
+            var boolToggle = new[] { true };
+            var protocols = new (SslProtocols serverProtocol, SslProtocols clientProtocol)[] {
+#if NET50
+                (serverProtocol: SslProtocols.Tls13, clientProtocol: Platform.AllSupportedSslProtocols)
+#endif
+            };
+
+            return
+                from frameLengths in lengthVariations
+                from isClient in boolToggle
+                from protocol in protocols
+                select new object[] { frameLengths, isClient, protocol.serverProtocol, protocol.clientProtocol };
+        }
+
         [Theory]
-        [MemberData(nameof(GetTlsWriteTestData))]
+        //[MemberData(nameof(GetTlsWriteTestData))]
         [MemberData(nameof(GetTlsWriteTestProtocol))]
+        //[MemberData(nameof(GetTlsWriteTestProtocol1))]
         public async Task TlsWrite(int[] frameLengths, bool isClient, SslProtocols serverProtocol, SslProtocols clientProtocol)
         {
             this.Output.WriteLine($"frameLengths: {string.Join(", ", frameLengths)}");
@@ -255,12 +281,14 @@ namespace DotNetty.Handlers.Tests
                     Assert.True(isEqual, $"---Expected:\n{ByteBufferUtil.PrettyHexDump(expectedBuffer)}\n---Actual:\n{ByteBufferUtil.PrettyHexDump(finalReadBuffer)}");
                 }
                 driverStream.Dispose();
+                await ch.CloseAsync().WithTimeout(TimeSpan.FromSeconds(1));
                 Assert.False(ch.Finish());
             }
             finally
             {
                 await executor.ShutdownGracefullyAsync(TimeSpan.Zero, TimeSpan.Zero);
             }
+            //await TlsWrite(frameLengths, isClient, serverProtocol, clientProtocol);
         }
 
         static List<(SslProtocols serverProtocol, SslProtocols clientProtocol)> FilterPlatformAvailableProtocols(List<(SslProtocols serverProtocol, SslProtocols clientProtocol)> protocols)
@@ -290,13 +318,20 @@ namespace DotNetty.Handlers.Tests
 
         static async Task<Tuple<EmbeddedChannel, SslStream>> SetupStreamAndChannelAsync(bool isClient, IEventExecutor executor, IWriteStrategy writeStrategy, SslProtocols serverProtocol, SslProtocols clientProtocol, List<Task> writeTasks)
         {
+            bool isDebug = false;
+#if NET50
+            if (isClient && serverProtocol == SslProtocols.Tls13 && clientProtocol != SslProtocols.Tls13)
+                isDebug = true;
+#endif
             X509Certificate2 tlsCertificate = TestResourceHelper.GetTestCertificate();
             string targetHost = tlsCertificate.GetNameInfo(X509NameType.DnsName, false);
             TlsHandler tlsHandler = isClient ?
                 new TlsHandler(stream => new SslStream(stream, true, (sender, certificate, chain, errors) => true), new ClientTlsSettings(clientProtocol, false, new List<X509Certificate>(), targetHost)) :
                 new TlsHandler(new ServerTlsSettings(tlsCertificate, false, false, serverProtocol));
-            //var ch = new EmbeddedChannel(new LoggingHandler("BEFORE"), tlsHandler, new LoggingHandler("AFTER"));
-            var ch = new EmbeddedChannel(tlsHandler);
+            tlsHandler.isDebug = isDebug;
+            var ch = isDebug
+                ? new EmbeddedChannel(new LoggingHandler("BEFORE"), tlsHandler, new LoggingHandler("AFTER"))
+                : new EmbeddedChannel(tlsHandler);
 
             IByteBuffer readResultBuffer = Unpooled.Buffer(4 * 1024);
             Func<ArraySegment<byte>, Task<int>> readDataFunc = async output =>
@@ -331,13 +366,35 @@ namespace DotNetty.Handlers.Tests
             });
 
             var driverStream = new SslStream(mediationStream, true, (_1, _2, _3, _4) => true);
-            if (isClient)
+            Exception e1 = null, e2 = null;
+            try
             {
-                await Task.Run(() => driverStream.AuthenticateAsServerAsync(tlsCertificate, false, serverProtocol, false)).WithTimeout(TimeSpan.FromSeconds(5));
+                if (isClient)
+                {
+                    await Task.Run(() => driverStream.AuthenticateAsServerAsync(tlsCertificate, false, serverProtocol, false)).WithTimeout(TimeSpan.FromSeconds(5));
+                }
+                else
+                {
+                    await Task.Run(() => driverStream.AuthenticateAsClientAsync(targetHost, null, clientProtocol, false)).WithTimeout(TimeSpan.FromSeconds(5));
+                }
             }
-            else
+            catch (Exception ex)
             {
-                await Task.Run(() => driverStream.AuthenticateAsClientAsync(targetHost, null, clientProtocol, false)).WithTimeout(TimeSpan.FromSeconds(5));
+                e1 = ex;
+            }
+            try
+            {
+                ch.CheckException();
+            }
+            catch (Exception ex)
+            {
+                e2 = ex;
+            }
+            if (e1 != null || e2 != null)
+            {
+                if (e1 != null && e2 != null)
+                    throw new AggregateException(e1, e2);
+                ExceptionDispatchInfo.Capture(e1 ?? e2).Throw();
             }
             if ((clientProtocol & serverProtocol) != SslProtocols.None)
                 Assert.True((clientProtocol & serverProtocol & driverStream.SslProtocol) != SslProtocols.None, "Unexpected ssl handshake protocol: " + driverStream.SslProtocol);

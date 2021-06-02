@@ -43,9 +43,12 @@ namespace DotNetty.Handlers.Tls
     {
         private static readonly Action<object, object> s_handshakeCompletionCallback = (t, s) => HandleHandshakeCompleted((Task)t, (TlsHandler)s);
         public static readonly AttributeKey<SslStream> SslStreamAttrKey = AttributeKey<SslStream>.ValueOf("SSLSTREAM");
+        internal bool isDebug;
 
         private bool EnsureAuthenticated(IChannelHandlerContext ctx)
         {
+//            if (isDebug)
+//                Debugger.Break();
             var oldState = State;
             if (!oldState.HasAny(TlsHandlerState.AuthenticationStarted))
             {

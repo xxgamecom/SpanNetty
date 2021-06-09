@@ -74,19 +74,21 @@ namespace DotNetty.Handlers.Tls
                         CertificateRevocationCheckMode = _serverSettings.CheckCertificateRevocation ? X509RevocationMode.Online : X509RevocationMode.NoCheck,
                         ApplicationProtocols = _serverSettings.ApplicationProtocols // ?? new List<SslApplicationProtocol>()
                     };
-                    if (_hasHttp2Protocol)
-                    {
-                        // https://tools.ietf.org/html/rfc7540#section-9.2.1
-                        sslOptions.AllowRenegotiation = false;
-                    }
-                    _sslStream.AuthenticateAsServerAsync(sslOptions, CancellationToken.None)
-                              .ContinueWith(s_handshakeCompletionCallback, this, TaskContinuationOptions.ExecuteSynchronously);
+                    _serverSettings.OnAuthenticate?.Invoke(ctx, _serverSettings, sslOptions);
+
+                    var cts = new CancellationTokenSource(_serverSettings.HandshakeTimeout);
+                    _sslStream.AuthenticateAsServerAsync(sslOptions, cts.Token)
+                              .ContinueWith(
+#if NET
+                                static
+#endif
+                                (t, s) => HandshakeCompletionCallback(t, s), (this, cts), TaskContinuationOptions.ExecuteSynchronously);
 #else
                     _sslStream.AuthenticateAsServerAsync(_serverCertificate,
                                                          _serverSettings.NegotiateClientCertificate,
                                                          _serverSettings.EnabledProtocols,
                                                          _serverSettings.CheckCertificateRevocation)
-                              .ContinueWith(s_handshakeCompletionCallback, this, TaskContinuationOptions.ExecuteSynchronously);
+                              .ContinueWith((t, s) => HandshakeCompletionCallback(t, s), this, TaskContinuationOptions.ExecuteSynchronously);
 #endif
                 }
                 else
@@ -111,19 +113,21 @@ namespace DotNetty.Handlers.Tls
                         LocalCertificateSelectionCallback = selector,
                         ApplicationProtocols = _clientSettings.ApplicationProtocols
                     };
-                    if (_hasHttp2Protocol)
-                    {
-                        // https://tools.ietf.org/html/rfc7540#section-9.2.1
-                        sslOptions.AllowRenegotiation = false;
-                    }
-                    _sslStream.AuthenticateAsClientAsync(sslOptions, CancellationToken.None)
-                              .ContinueWith(s_handshakeCompletionCallback, this, TaskContinuationOptions.ExecuteSynchronously);
+                    _clientSettings.OnAuthenticate?.Invoke(ctx, _clientSettings, sslOptions);
+
+                    var cts = new CancellationTokenSource(_clientSettings.HandshakeTimeout);
+                    _sslStream.AuthenticateAsClientAsync(sslOptions, cts.Token)
+                              .ContinueWith(
+#if NET
+                                static
+#endif
+                                (t, s) => HandshakeCompletionCallback(t, s), (this, cts), TaskContinuationOptions.ExecuteSynchronously);
 #else
                     _sslStream.AuthenticateAsClientAsync(_clientSettings.TargetHost,
                                                          _clientSettings.X509CertificateCollection,
                                                          _clientSettings.EnabledProtocols,
                                                          _clientSettings.CheckCertificateRevocation)
-                              .ContinueWith(s_handshakeCompletionCallback, this, TaskContinuationOptions.ExecuteSynchronously);
+                              .ContinueWith((t, s) => HandshakeCompletionCallback(t, s), this, TaskContinuationOptions.ExecuteSynchronously);
 #endif
                 }
                 return false;
@@ -132,14 +136,40 @@ namespace DotNetty.Handlers.Tls
             return oldState.Has(TlsHandlerState.Authenticated);
         }
 
+#if NETCOREAPP_2_0_GREATER || NETSTANDARD_2_0_GREATER
+        private static void HandshakeCompletionCallback(Task task, object s)
+        {
+            var (self, cts) = ((TlsHandler self, CancellationTokenSource cts))s;
+            var capturedContext = self.CapturedContext;
+            cts.Dispose();
+            if (capturedContext.Executor.InEventLoop)
+            {
+                HandleHandshakeCompleted(task, self);
+            }
+            else
+            {
+                capturedContext.Executor.Execute(s_handshakeCompletionCallback, task, self);
+            }
+        }
+#else
+        private static void HandshakeCompletionCallback(Task task, object s)
+        {
+            var self = (TlsHandler)s;
+            var capturedContext = self.CapturedContext;
+            if (capturedContext.Executor.InEventLoop)
+            {
+                HandleHandshakeCompleted(task, self);
+            }
+            else
+            {
+                capturedContext.Executor.Execute(s_handshakeCompletionCallback, task, self);
+            }
+        }
+#endif
+
         private static void HandleHandshakeCompleted(Task task, TlsHandler self)
         {
             var capturedContext = self.CapturedContext;
-            if (!capturedContext.Executor.InEventLoop)
-            {
-                capturedContext.Executor.Execute(s_handshakeCompletionCallback, task, self);
-                return;
-            }
             var oldState = self.State;
 
             if (task.IsSuccess())

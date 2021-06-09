@@ -82,10 +82,20 @@ namespace DotNetty.Handlers.Tls
 
         public Func<X509Certificate, X509Chain, SslPolicyErrors, bool> ServerCertificateValidation { get; set; }
 
+        /// <summary>
+        /// Overrides the current <see cref="ServerCertificateValidation"/> callback and allows any server certificate.
+        /// </summary>
+        public void AllowAnyServerCertificate()
+        {
+            ServerCertificateValidation = (_, __, ___) => true;
+        }
+
 #if NETCOREAPP_2_0_GREATER || NETSTANDARD_2_0_GREATER
         public System.Collections.Generic.List<SslApplicationProtocol> ApplicationProtocols { get; set; }
 
         public Func<IChannelHandlerContext, string, X509CertificateCollection, X509Certificate, string[], X509Certificate2> UserCertSelector { get; set; }
+
+        public Action<IChannelHandlerContext, ClientTlsSettings, SslClientAuthenticationOptions> OnAuthenticate { get; set; }
 #else
         public Func<SslStream, string, X509CertificateCollection, X509Certificate, string[], X509Certificate2> UserCertSelector { get; set; }
 #endif

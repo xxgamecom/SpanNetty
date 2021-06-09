@@ -51,7 +51,6 @@ namespace DotNetty.Handlers.Tls
         private readonly ClientTlsSettings _clientSettings;
         private readonly X509Certificate _serverCertificate;
 #if NETCOREAPP_2_0_GREATER || NETSTANDARD_2_0_GREATER
-        private readonly bool _hasHttp2Protocol;
         private readonly Func<IChannelHandlerContext, string, X509Certificate2> _serverCertificateSelector;
         private readonly Func<IChannelHandlerContext, string, X509CertificateCollection, X509Certificate, string[], X509Certificate2> _userCertSelector;
 #endif
@@ -110,11 +109,6 @@ namespace DotNetty.Handlers.Tls
                 {
                     ThrowHelper.ThrowArgumentException_ServerCertificateRequired();
                 }
-                var serverApplicationProtocols = _serverSettings.ApplicationProtocols;
-                if (serverApplicationProtocols is object)
-                {
-                    _hasHttp2Protocol = serverApplicationProtocols.Contains(SslApplicationProtocol.Http2);
-                }
 #else
                 if (_serverCertificate is null)
                 {
@@ -126,8 +120,6 @@ namespace DotNetty.Handlers.Tls
 #if NETCOREAPP_2_0_GREATER || NETSTANDARD_2_0_GREATER
             if (_clientSettings is object)
             {
-                var clientApplicationProtocols = _clientSettings.ApplicationProtocols;
-                _hasHttp2Protocol = clientApplicationProtocols is object && clientApplicationProtocols.Contains(SslApplicationProtocol.Http2);
                 _userCertSelector = _clientSettings.UserCertSelector;
             }
 #endif

@@ -47,11 +47,11 @@ namespace DotNetty.Handlers.Tls
 
         private bool EnsureAuthenticated(IChannelHandlerContext ctx)
         {
-//            if (isDebug)
-//                Debugger.Break();
             var oldState = State;
             if (!oldState.HasAny(TlsHandlerState.AuthenticationStarted))
             {
+                if (isDebug)
+                    Debugger.Break();
                 State = oldState | TlsHandlerState.Authenticating;
                 if (_isServer)
                 {

@@ -8,12 +8,20 @@ namespace DotNetty.Tests.Common
 
   public abstract class TestBase
   {
+    static bool loggerInited;
     protected readonly ITestOutputHelper Output;
 
     protected TestBase(ITestOutputHelper output)
     {
       this.Output = output;
-      InternalLoggerFactory.DefaultFactory.AddProvider(new XUnitOutputLoggerProvider(output));
+      lock(typeof(TestBase))
+      {
+          if (!loggerInited)
+          {
+              InternalLoggerFactory.DefaultFactory.AddProvider(new XUnitOutputLoggerProvider(output));
+              loggerInited = true;
+          }
+      }
     }
   }
 }

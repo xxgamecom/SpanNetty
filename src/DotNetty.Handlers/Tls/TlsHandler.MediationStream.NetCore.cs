@@ -41,7 +41,7 @@ namespace DotNetty.Handlers.Tls
 
             public void SetSource(in ReadOnlyMemory<byte> source, IByteBufferAllocator allocator)
             {
-                Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]SetSource");
+                if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]SetSource");
                 lock (this)
                 {
                     ResetSource(allocator);
@@ -60,7 +60,7 @@ namespace DotNetty.Handlers.Tls
                     var buf = this._ownedInputBuffer;
                     if (leftLen > 0)
                     {
-                        Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ResetSource->{leftLen}");
+                        if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ResetSource->{leftLen}");
                         if (buf != null)
                         {
                             buf.DiscardSomeReadBytes();
@@ -74,7 +74,7 @@ namespace DotNetty.Handlers.Tls
                     }
                     else
                     {
-                        Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ResetSource->clean");
+                        if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ResetSource->clean");
                         buf?.DiscardSomeReadBytes();
                     }
                     _input = null;
@@ -85,7 +85,7 @@ namespace DotNetty.Handlers.Tls
 
             public void ExpandSource(int count)
             {
-                Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ExpandSource: {count}");
+                if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ExpandSource: {count}");
                 lock (this)
                 {
                     Debug.Assert(!_input.IsEmpty);
@@ -118,7 +118,7 @@ namespace DotNetty.Handlers.Tls
 
             public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
             {
-                Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ReadAsync");
+                if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ReadAsync");
                 if (this.TotalReadableBytes > 0)
                 {
                     // we have the bytes available upfront - write out synchronously
@@ -178,24 +178,40 @@ namespace DotNetty.Handlers.Tls
                         }
                     } while (false);
 
-                    Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ReadFromInput : length={length}\r\n{ByteBufferUtil.PrettyHexDump(Unpooled.WrappedBuffer(destination.Slice(0, length).ToArray()))}");
+                    if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]ReadFromInput : length={length}\r\n{ByteBufferUtil.PrettyHexDump(Unpooled.WrappedBuffer(destination.Slice(0, length).ToArray()))}");
                     return length;
                 }
             }
 
             public override void Write(ReadOnlySpan<byte> buffer)
-                => _owner.FinishWrap(buffer, _owner.CapturedContext.NewPromise());
-
-            public override void Write(byte[] buffer, int offset, int count)
-                => _owner.FinishWrap(buffer, offset, count, _owner.CapturedContext.NewPromise());
-
-            public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
             {
-                return new ValueTask(_owner.FinishWrapNonAppDataAsync(buffer, _owner.CapturedContext.NewPromise()));
+                if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]Write1\r\n{ByteBufferUtil.PrettyHexDump(Unpooled.WrappedBuffer(buffer.ToArray()))})");
+                _owner.FinishWrap(buffer, _owner.CapturedContext.NewPromise());
             }
 
-            public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-                => _owner.FinishWrapNonAppDataAsync(buffer, offset, count, _owner.CapturedContext.NewPromise());
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]Write2\r\n{ByteBufferUtil.PrettyHexDump(Unpooled.WrappedBuffer(buffer, offset, count))}");
+                _owner.FinishWrap(buffer, offset, count, _owner.CapturedContext.NewPromise());
+            }
+
+            public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                if (_owner.isDebug)
+                    Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]Write3\r\n{ByteBufferUtil.PrettyHexDump(Unpooled.WrappedBuffer(buffer.ToArray()))})");
+                var task = _owner.FinishWrapNonAppDataAsync(buffer, _owner.CapturedContext.NewPromise());
+                await task;
+                if (_owner.isDebug)
+                    Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]Write3-Finish");
+            }
+
+            public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]Write4\r\n{ByteBufferUtil.PrettyHexDump(Unpooled.WrappedBuffer(buffer, offset, count))}");
+                var task = _owner.FinishWrapNonAppDataAsync(buffer, offset, count, _owner.CapturedContext.NewPromise());
+                await task;
+                if (_owner.isDebug) Trace.WriteLine($"[{Environment.CurrentManagedThreadId}]Write4-Finish");
+            }
         }
     }
 }

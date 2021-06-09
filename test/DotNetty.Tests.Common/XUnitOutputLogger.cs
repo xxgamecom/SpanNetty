@@ -6,8 +6,9 @@ namespace DotNetty.Tests.Common
   using System;
   using Xunit.Abstractions;
   using Microsoft.Extensions.Logging;
+    using System.Diagnostics;
 
-  public class XUnitOutputLogger : ILogger
+    public class XUnitOutputLogger : ILogger
   {
     static readonly object LockObject = new object();
     readonly string categoryName;
@@ -25,7 +26,8 @@ namespace DotNetty.Tests.Common
       {
         try
         {
-          this.output.WriteLine($"{DateTime.Now}\t[{logLevel.ToString()}]\t{eventId.Name}\t{this.categoryName}\t{formatter(state, exception)}\t{exception}");
+                    Trace.WriteLine($"{DateTime.Now}\t[{logLevel.ToString()}]\t{eventId.Name}\t{this.categoryName}\t{formatter(state, exception)}\t{exception}");
+          //this.output.WriteLine($"{DateTime.Now}\t[{logLevel.ToString()}]\t{eventId.Name}\t{this.categoryName}\t{formatter(state, exception)}\t{exception}");
         }
         catch (Exception ex)
         {

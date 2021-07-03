@@ -498,7 +498,7 @@ namespace DotNetty.Common.Concurrency
         {
             if (InEventLoop)
             {
-                var isBacklogEmpty = !HasTasks || IsEmpty(ScheduledTaskQueue);
+                var isBacklogEmpty = !HasTasks && IsEmpty(ScheduledTaskQueue);
                 ScheduleFromEventLoop(task);
                 if (isBacklogEmpty)
                 {

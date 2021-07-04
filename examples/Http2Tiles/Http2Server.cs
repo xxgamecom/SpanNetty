@@ -60,7 +60,7 @@ namespace Http2Tiles
 
             bootstrap
                 .Option(ChannelOption.SoBacklog, 1024)
-                .Option(ChannelOption.Allocator, UnpooledByteBufferAllocator.Default)
+                //.Option(ChannelOption.Allocator, UnpooledByteBufferAllocator.Default)
 
                 .Handler(new LoggingHandler("LSTN"))
 

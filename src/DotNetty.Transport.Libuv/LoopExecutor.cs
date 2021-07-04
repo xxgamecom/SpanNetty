@@ -278,7 +278,7 @@ namespace DotNetty.Transport.Libuv
             {
                 nextTimeout = DefaultBreakoutTime;
             }
-            else if (ScheduledTaskQueue.TryPeek(out IScheduledRunnable nextScheduledTask))
+            else if (TryPeekScheduledTask(out IScheduledRunnable nextScheduledTask))
             {
                 long delayNanos = nextScheduledTask.DelayNanos;
                 if ((ulong)delayNanos > 0UL) // delayNanos 为非负值

@@ -412,7 +412,7 @@ namespace DotNetty.Common.Concurrency
             Debug.Assert(InEventLoop);
             if (_blockingTaskQueue is null) { ThrowHelper.ThrowNotSupportedException(); }
 
-            if (ScheduledTaskQueue.TryPeek(out IScheduledRunnable scheduledTask))
+            if (_scheduledTaskQueue.TryPeek(out IScheduledRunnable scheduledTask))
             {
                 if (TryTakeTask(scheduledTask.DelayNanos, out IRunnable task)) { return task; }
             }
@@ -431,7 +431,7 @@ namespace DotNetty.Common.Concurrency
         {
             for (; ; )
             {
-                if (ScheduledTaskQueue.TryPeek(out IScheduledRunnable scheduledTask))
+                if (_scheduledTaskQueue.TryPeek(out IScheduledRunnable scheduledTask))
                 {
                     if (TryTakeTask(scheduledTask.DelayNanos, out IRunnable task)) { return task; }
                 }
@@ -468,7 +468,7 @@ namespace DotNetty.Common.Concurrency
 
         protected bool FetchFromScheduledTaskQueue()
         {
-            if (ScheduledTaskQueue.IsEmpty) { return true; }
+            if (_scheduledTaskQueue.IsEmpty) { return true; }
 
             var nanoTime = PreciseTime.NanoTime();
             var scheduledTask = PollScheduledTask(nanoTime);
@@ -478,7 +478,7 @@ namespace DotNetty.Common.Concurrency
                 if (!taskQueue.TryEnqueue(scheduledTask))
                 {
                     // No space left in the task queue add it back to the scheduledTaskQueue so we pick it up again.
-                    _ = ScheduledTaskQueue.TryEnqueue(scheduledTask);
+                    _ = _scheduledTaskQueue.TryEnqueue(scheduledTask);
                     return false;
                 }
                 scheduledTask = PollScheduledTask(nanoTime);
@@ -491,7 +491,7 @@ namespace DotNetty.Common.Concurrency
         /// </summary>
         private bool ExecuteExpiredScheduledTasks()
         {
-            if (ScheduledTaskQueue.IsEmpty) { return false; }
+            if (_scheduledTaskQueue.IsEmpty) { return false; }
 
             var nanoTime = PreciseTime.NanoTime();
             var scheduledTask = PollScheduledTask(nanoTime);

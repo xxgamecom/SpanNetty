@@ -49,7 +49,7 @@ namespace DotNetty.Common.Concurrency
             WakeupTask = new NoOpRunnable();
         }
 
-        protected internal readonly IPriorityQueue<IScheduledRunnable> ScheduledTaskQueue;
+        internal readonly IPriorityQueue<IScheduledRunnable> _scheduledTaskQueue;
         private long _nextTaskId;
 
         protected AbstractScheduledEventExecutor()
@@ -60,12 +60,10 @@ namespace DotNetty.Common.Concurrency
         protected AbstractScheduledEventExecutor(IEventExecutorGroup parent)
             : base(parent)
         {
-            ScheduledTaskQueue = new DefaultPriorityQueue<IScheduledRunnable>();
+            _scheduledTaskQueue = new DefaultPriorityQueue<IScheduledRunnable>();
         }
 
-        /// <summary>
-        /// TBD
-        /// </summary>
+        /// <summary>TBD</summary>
         protected abstract bool HasTasks { get; }
 
         [MethodImpl(InlineMethod.AggressiveOptimization)]
@@ -94,6 +92,7 @@ namespace DotNetty.Common.Concurrency
             return taskQueue is null || 0u >= (uint)taskQueue.Count;
         }
 
+        [Obsolete("Please use IPriorityQueue{T}.IsEmpty instead.")]
         [MethodImpl(InlineMethod.AggressiveOptimization)]
         protected static bool IsEmpty(IPriorityQueue<IScheduledRunnable> taskQueue)
         {
@@ -108,8 +107,8 @@ namespace DotNetty.Common.Concurrency
         {
             Debug.Assert(InEventLoop);
 
-            IPriorityQueue<IScheduledRunnable> scheduledTaskQueue = ScheduledTaskQueue;
-            if (IsEmpty(scheduledTaskQueue)) { return; }
+            IPriorityQueue<IScheduledRunnable> scheduledTaskQueue = _scheduledTaskQueue;
+            if (scheduledTaskQueue.IsEmpty) { return; }
 
             IScheduledRunnable[] tasks = scheduledTaskQueue.ToArray();
             for (int i = 0; i < tasks.Length; i++)
@@ -117,7 +116,7 @@ namespace DotNetty.Common.Concurrency
                 _ = tasks[i].CancelWithoutRemove();
             }
 
-            ScheduledTaskQueue.ClearIgnoringIndexes();
+            _scheduledTaskQueue.ClearIgnoringIndexes();
         }
 
         internal protected IScheduledRunnable PollScheduledTask() => PollScheduledTask(NanoTime());
@@ -131,10 +130,10 @@ namespace DotNetty.Common.Concurrency
         {
             Debug.Assert(InEventLoop);
 
-            if (ScheduledTaskQueue.TryPeek(out IScheduledRunnable scheduledTask) &&
+            if (_scheduledTaskQueue.TryPeek(out IScheduledRunnable scheduledTask) &&
                 scheduledTask.DeadlineNanos <= nanoTime)
             {
-                _ = ScheduledTaskQueue.TryDequeue(out _);
+                _ = _scheduledTaskQueue.TryDequeue(out _);
                 scheduledTask.SetConsumed();
                 return scheduledTask;
             }
@@ -147,7 +146,7 @@ namespace DotNetty.Common.Concurrency
         /// </summary>
         protected long NextScheduledTaskNanos()
         {
-            if (ScheduledTaskQueue.TryPeek(out IScheduledRunnable nextScheduledRunnable))
+            if (_scheduledTaskQueue.TryPeek(out IScheduledRunnable nextScheduledRunnable))
             {
                 return nextScheduledRunnable.DelayNanos;
             }
@@ -160,7 +159,7 @@ namespace DotNetty.Common.Concurrency
         /// </summary>
         protected long NextScheduledTaskDeadlineNanos()
         {
-            if (ScheduledTaskQueue.TryPeek(out IScheduledRunnable nextScheduledRunnable))
+            if (_scheduledTaskQueue.TryPeek(out IScheduledRunnable nextScheduledRunnable))
             {
                 return nextScheduledRunnable.DeadlineNanos;
             }
@@ -170,9 +169,12 @@ namespace DotNetty.Common.Concurrency
         [MethodImpl(InlineMethod.AggressiveOptimization)]
         protected IScheduledRunnable PeekScheduledTask()
         {
-            //IPriorityQueue<IScheduledRunnable> scheduledTaskQueue = ScheduledTaskQueue;
-            //return !IsNullOrEmpty(scheduledTaskQueue) && scheduledTaskQueue.TryPeek(out IScheduledRunnable task) ? task : null;
-            return ScheduledTaskQueue.TryPeek(out IScheduledRunnable task) ? task : null;
+            return _scheduledTaskQueue.TryPeek(out IScheduledRunnable task) ? task : null;
+        }
+
+        protected bool TryPeekScheduledTask(out IScheduledRunnable task)
+        {
+            return _scheduledTaskQueue.TryPeek(out task);
         }
 
         /// <summary>
@@ -180,7 +182,7 @@ namespace DotNetty.Common.Concurrency
         /// </summary>
         protected bool HasScheduledTasks()
         {
-            return ScheduledTaskQueue.TryPeek(out IScheduledRunnable scheduledTask) && scheduledTask.DeadlineNanos <= PreciseTime.NanoTime();
+            return _scheduledTaskQueue.TryPeek(out IScheduledRunnable scheduledTask) && scheduledTask.DeadlineNanos <= PreciseTime.NanoTime();
         }
 
         public override IScheduledTask Schedule(IRunnable action, TimeSpan delay)
@@ -494,9 +496,9 @@ namespace DotNetty.Common.Concurrency
             var nextTaskId = ++_nextTaskId;
             if (nextTaskId == long.MaxValue) { _nextTaskId = 0; }
 
-            var isBacklogEmpty = !HasTasks && IsEmpty(ScheduledTaskQueue);
+            var isBacklogEmpty = !HasTasks && _scheduledTaskQueue.IsEmpty;
 
-            _ = ScheduledTaskQueue.TryEnqueue(task.SetId(nextTaskId));
+            _ = _scheduledTaskQueue.TryEnqueue(task.SetId(nextTaskId));
 
             if (isBacklogEmpty)
             {
@@ -537,7 +539,7 @@ namespace DotNetty.Common.Concurrency
         {
             if (InEventLoop)
             {
-                _ = ScheduledTaskQueue.TryRemove(task);
+                _ = _scheduledTaskQueue.TryRemove(task);
             }
             else
             {
@@ -573,9 +575,7 @@ namespace DotNetty.Common.Concurrency
             return true;
         }
 
-        /// <summary>
-        /// TBD
-        /// </summary>
+        /// <summary>TBD</summary>
         /// <param name="inEventLoop"></param>
         protected virtual void EnusreWakingUp(bool inEventLoop) { }
 

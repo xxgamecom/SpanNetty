@@ -244,7 +244,7 @@ namespace DotNetty.Transport.Libuv
         {
             if (_wakeUp)
             {
-                _ = _timerHandle.Start(MinimumBreakoutTime, 0);
+                _ = _timerHandle.Start(DefaultBreakoutTime, 0);
             }
         }
 

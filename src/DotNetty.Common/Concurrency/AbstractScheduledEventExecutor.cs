@@ -491,21 +491,26 @@ namespace DotNetty.Common.Concurrency
         internal void ScheduleFromEventLoop(IScheduledRunnable task)
         {
             // nextTaskId a long and so there is no chance it will overflow back to 0
-            _ = ScheduledTaskQueue.TryEnqueue(task.SetId(++_nextTaskId));
+            var nextTaskId = ++_nextTaskId;
+            if (nextTaskId == long.MaxValue) { _nextTaskId = 0; }
+
+            var isBacklogEmpty = !HasTasks && IsEmpty(ScheduledTaskQueue);
+
+            _ = ScheduledTaskQueue.TryEnqueue(task.SetId(nextTaskId));
+
+            if (isBacklogEmpty)
+            {
+                // 在 Libuv.LoopExecutor 中，当任务执行完毕，清空任务队列后，后续如果只有 ScheduledTask 入队的情况下，
+                // 并不会激发线程进行任务处理，需唤醒
+                EnusreWakingUp(true);
+            }
         }
 
         private IScheduledRunnable Schedule(IScheduledRunnable task)
         {
             if (InEventLoop)
             {
-                var isBacklogEmpty = !HasTasks && IsEmpty(ScheduledTaskQueue);
                 ScheduleFromEventLoop(task);
-                if (isBacklogEmpty)
-                {
-                    // 在 Libuv.LoopExecutor 中，当任务执行完毕，清空任务队列后，后续如果只有 ScheduledTask 入队的情况下，
-                    // 并不会激发线程进行任务处理，需唤醒
-                    EnusreWakingUp(true);
-                }
             }
             else
             {
